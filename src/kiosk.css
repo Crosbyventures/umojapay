@@ -1,0 +1,19 @@
+/* Add ?kiosk=1 to the PayLink URL */
+.kiosk body {
+  overflow: hidden;
+}
+
+.kiosk .kiosk-hide {
+  display: none !important;
+}
+
+.kiosk .kiosk-qr {
+  transform: scale(1.2);
+}
+
+.kiosk .kiosk-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}

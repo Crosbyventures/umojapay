@@ -1,0 +1,121 @@
+/* UMOJA PayLinks — Web3 Mesh Theme (clean) */
+
+:root{
+  --bg0:#070b12;
+  --bg1:#0b1220;
+  --bg2:#0f1a2e;
+
+  --glass: rgba(255,255,255,0.06);
+  --glassBorder: rgba(255,255,255,0.12);
+
+  --green:#00e0a4;
+  --blue:#4cc9f0;
+  --purple:#7c7cff;
+
+  --muted: rgba(255,255,255,0.68);
+}
+
+*{ box-sizing:border-box; }
+
+html, body{
+  margin:0;
+  padding:0;
+  min-height:100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  color:#fff;
+}
+
+/* Web3 mesh background */
+body{
+  background:
+    radial-gradient(800px 600px at 15% 20%, rgba(0,224,164,0.18), transparent 45%),
+    radial-gradient(700px 500px at 85% 25%, rgba(76,201,240,0.16), transparent 45%),
+    radial-gradient(650px 650px at 50% 80%, rgba(124,124,255,0.14), transparent 50%),
+    linear-gradient(180deg, var(--bg0), var(--bg2));
+  background-attachment: fixed;
+}
+
+/* Subtle “mesh grid” overlay (no mix-blend-mode warnings) */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:
+    repeating-linear-gradient(120deg,
+      rgba(255,255,255,0.05) 0px,
+      rgba(255,255,255,0.05) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  opacity:0.08;
+}
+
+/* Card style (used by your <Card /> component most of the time) */
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  border: 1px solid var(--glassBorder);
+  border-radius:16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+  padding:16px;
+}
+
+/* Inputs */
+input, textarea, select{
+  width:100%;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius:12px;
+  padding:12px 14px;
+  color:#fff;
+  outline:none;
+  font-size:14px;
+}
+
+input::placeholder, textarea::placeholder{
+  color: rgba(255,255,255,0.45);
+}
+
+input:focus, textarea:focus, select:focus{
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(76,201,240,0.22);
+}
+
+/* Buttons */
+button{
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  border:none;
+  border-radius:14px;
+  padding:12px 16px;
+  font-weight:700;
+  color:#061414;
+  cursor:pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  box-shadow: 0 10px 30px rgba(0,224,164,0.28);
+}
+
+button:hover{
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 14px 40px rgba(0,224,164,0.38);
+}
+
+button:disabled{
+  opacity:0.55;
+  cursor:not-allowed;
+}
+
+/* Text helpers */
+.muted{ color: var(--muted); }
+
+/* Kiosk mode = layout only (NO theme change) */
+html.kiosk body{
+  background:
+    radial-gradient(800px 600px at 15% 20%, rgba(0,224,164,0.18), transparent 45%),
+    radial-gradient(700px 500px at 85% 25%, rgba(76,201,240,0.16), transparent 45%),
+    radial-gradient(650px 650px at 50% 80%, rgba(124,124,255,0.14), transparent 50%),
+    linear-gradient(180deg, var(--bg0), var(--bg2));
+}
+
+.kiosk-wrap{ min-height:100vh; }
+.kiosk-qr{ transform: scale(1.18); transform-origin:center; }
+.kiosk-hide{ display:none !important; }
