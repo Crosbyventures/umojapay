@@ -15,6 +15,17 @@ function safeAddress(v: string | null): Address | null {
   return s as Address
 }
 
+// ✅ Reads query params from "#/pay?..." for GitHub Pages hash routing
+function getHashSearchParams(): URLSearchParams {
+  // examples:
+  // "#/pay?to=0x..&token=0x.."
+  // "#/pay"
+  const hash = window.location.hash || ''
+  const qIndex = hash.indexOf('?')
+  if (qIndex === -1) return new URLSearchParams()
+  return new URLSearchParams(hash.slice(qIndex + 1))
+}
+
 export default function Pay() {
   // ✅ HARD LOCKED (never read from URL / never editable)
   const feeBps = FEE_BPS_DEFAULT // 100 = 1%
@@ -25,36 +36,29 @@ export default function Pay() {
   const [amount, setAmount] = useState<string>('')
   const [memo, setMemo] = useState<string>('')
 
-  // Token state is stored as Address to avoid "USDT/USDC" mismatch bugs
+  // Token address state (USDT/USDC)
   const [tokenAddress, setTokenAddress] = useState<Address>(USDT_ADDRESS)
 
-  // ✅ Read ONLY allowed params from URL (NO fee, NO treasury)
+  // ✅ Read ONLY allowed params from HASH (NO fee, NO treasury)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
+    const params = getHashSearchParams()
 
-    // chain (optional but we can validate)
     const chainParam = params.get('chain')
     if (chainParam && Number(chainParam) !== CHAIN_ID) {
-      // ignore wrong chain; you can show a warning if you want
       console.warn('Wrong chain in URL. Expected', CHAIN_ID, 'got', chainParam)
     }
 
-    // token address (optional)
     const tokenParam = safeAddress(params.get('token'))
     if (tokenParam) {
-      if (
-        tokenParam.toLowerCase() === USDT_ADDRESS.toLowerCase() ||
-        tokenParam.toLowerCase() === USDC_ADDRESS.toLowerCase()
-      ) {
+      const t = tokenParam.toLowerCase()
+      if (t === USDT_ADDRESS.toLowerCase() || t === USDC_ADDRESS.toLowerCase()) {
         setTokenAddress(tokenParam)
       }
     }
 
-    // receiver
     const toParam = safeAddress(params.get('to'))
     if (toParam) setReceiver(toParam)
 
-    // amount + memo
     const amountParam = params.get('amount')
     if (amountParam) setAmount(amountParam)
 
@@ -69,21 +73,16 @@ export default function Pay() {
   }, [tokenAddress])
 
   async function onPay() {
-    // ✅ FINAL BOSS: Always use locked feeBps + treasury from HERE
-    // ✅ Never trust anything from UI for treasury/fee
-
     console.log('PAY (LOCKED)', {
       chainId: CHAIN_ID,
       tokenAddress,
       receiver,
       amount,
       memo,
-      feeBps, // locked
-      treasury, // locked
+      feeBps,     // locked
+      treasury,   // locked
     })
 
-    // TODO: plug your real transfer execution here.
-    // It must use `treasury` + `feeBps` from this scope.
     alert('Pay triggered (connect your transfer logic here).')
   }
 
@@ -125,7 +124,7 @@ export default function Pay() {
         style={{ width: '100%', marginBottom: 16 }}
       />
 
-      {/* ✅ Fee + treasury are hidden completely */}
+      {/* ✅ Fee + treasury hidden */}
       <button onClick={onPay} style={{ width: '100%', padding: 12 }}>
         Pay Now
       </button>

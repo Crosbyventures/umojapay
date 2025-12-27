@@ -19,7 +19,7 @@ export default function Create() {
     params.set('to', receiver)
     if (amount) params.set('amount', amount)
     if (memo) params.set('memo', memo)
-    return `${window.location.origin}/pay?${params.toString()}`
+    return `${window.location.origin}/#/pay?${params.toString()}`
   }, [chain, token, receiver, amount, memo])
 
   return (
