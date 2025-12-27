@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Address } from 'viem'
 import {
   TREASURY_WALLET,
@@ -8,39 +8,83 @@ import {
   CHAIN_ID,
 } from '../config'
 
-export default function Pay() {
-  const [receiver, setReceiver] = useState<Address>('' as Address)
-  const [amount, setAmount] = useState<string>('')
-  const [token, setToken] = useState<'USDT' | 'USDC'>('USDT')
-  const [memo, setMemo] = useState<string>('')
+function safeAddress(v: string | null): Address | null {
+  if (!v) return null
+  const s = v.trim()
+  if (!/^0x[a-fA-F0-9]{40}$/.test(s)) return null
+  return s as Address
+}
 
-  // ✅ HARD LOCKED (cannot be changed by UI or query params)
-  const feeBps = FEE_BPS_DEFAULT
+export default function Pay() {
+  // ✅ HARD LOCKED (never read from URL / never editable)
+  const feeBps = FEE_BPS_DEFAULT // 100 = 1%
   const treasury = TREASURY_WALLET
 
-  const tokenAddress = useMemo(() => {
-    return token === 'USDT' ? USDT_ADDRESS : USDC_ADDRESS
-  }, [token])
+  // UI state
+  const [receiver, setReceiver] = useState<Address>('' as Address)
+  const [amount, setAmount] = useState<string>('')
+  const [memo, setMemo] = useState<string>('')
 
-  const feePercent = (feeBps / 100).toFixed(2) + '%'
+  // Token state is stored as Address to avoid "USDT/USDC" mismatch bugs
+  const [tokenAddress, setTokenAddress] = useState<Address>(USDT_ADDRESS)
+
+  // ✅ Read ONLY allowed params from URL (NO fee, NO treasury)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+
+    // chain (optional but we can validate)
+    const chainParam = params.get('chain')
+    if (chainParam && Number(chainParam) !== CHAIN_ID) {
+      // ignore wrong chain; you can show a warning if you want
+      console.warn('Wrong chain in URL. Expected', CHAIN_ID, 'got', chainParam)
+    }
+
+    // token address (optional)
+    const tokenParam = safeAddress(params.get('token'))
+    if (tokenParam) {
+      if (
+        tokenParam.toLowerCase() === USDT_ADDRESS.toLowerCase() ||
+        tokenParam.toLowerCase() === USDC_ADDRESS.toLowerCase()
+      ) {
+        setTokenAddress(tokenParam)
+      }
+    }
+
+    // receiver
+    const toParam = safeAddress(params.get('to'))
+    if (toParam) setReceiver(toParam)
+
+    // amount + memo
+    const amountParam = params.get('amount')
+    if (amountParam) setAmount(amountParam)
+
+    const memoParam = params.get('memo')
+    if (memoParam) setMemo(memoParam)
+  }, [])
+
+  const tokenLabel = useMemo(() => {
+    return tokenAddress.toLowerCase() === USDC_ADDRESS.toLowerCase()
+      ? 'USDC'
+      : 'USDT'
+  }, [tokenAddress])
 
   async function onPay() {
-    // ✅ This is where your real transfer function runs.
-    // IMPORTANT: when you call it, pass `treasury` + `feeBps` from HERE (locked),
-    // not from any user input.
+    // ✅ FINAL BOSS: Always use locked feeBps + treasury from HERE
+    // ✅ Never trust anything from UI for treasury/fee
 
-    console.log('PAY', {
-      CHAIN_ID,
-      token,
+    console.log('PAY (LOCKED)', {
+      chainId: CHAIN_ID,
       tokenAddress,
       receiver,
       amount,
       memo,
-      feeBps,
-      treasury,
+      feeBps, // locked
+      treasury, // locked
     })
 
-    alert('Pay triggered (wire your existing transfer code here).')
+    // TODO: plug your real transfer execution here.
+    // It must use `treasury` + `feeBps` from this scope.
+    alert('Pay triggered (connect your transfer logic here).')
   }
 
   return (
@@ -49,12 +93,12 @@ export default function Pay() {
 
       <label>Token</label>
       <select
-        value={token}
-        onChange={(e) => setToken(e.target.value as 'USDT' | 'USDC')}
+        value={tokenAddress}
+        onChange={(e) => setTokenAddress(e.target.value as Address)}
         style={{ width: '100%', marginBottom: 12 }}
       >
-        <option value="USDT">USDT</option>
-        <option value="USDC">USDC</option>
+        <option value={USDT_ADDRESS}>USDT</option>
+        <option value={USDC_ADDRESS}>USDC</option>
       </select>
 
       <label>Receiver wallet</label>
@@ -65,7 +109,7 @@ export default function Pay() {
         style={{ width: '100%', marginBottom: 12 }}
       />
 
-      <label>Amount</label>
+      <label>Amount ({tokenLabel})</label>
       <input
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
@@ -78,22 +122,17 @@ export default function Pay() {
         value={memo}
         onChange={(e) => setMemo(e.target.value)}
         placeholder="e.g. Rent / Donation"
-        style={{ width: '100%', marginBottom: 12 }}
+        style={{ width: '100%', marginBottom: 16 }}
       />
 
-      {/* ✅ Locked fee (not editable) */}
-      <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, opacity: 0.9 }}>
-        <div style={{ fontWeight: 700 }}>Protocol fee (locked)</div>
-        <div>{feePercent} (BPS: {feeBps})</div>
-        {/* ✅ Treasury is intentionally hidden */}
-        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          Fee receiver is secured (not editable)
-        </div>
-      </div>
-
+      {/* ✅ Fee + treasury are hidden completely */}
       <button onClick={onPay} style={{ width: '100%', padding: 12 }}>
         Pay Now
       </button>
+
+      <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
+        Note: A 1% protocol fee is applied automatically.
+      </div>
     </div>
   )
 }

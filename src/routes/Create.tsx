@@ -1,12 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Address } from 'viem'
-import {
-  TREASURY_WALLET,
-  FEE_BPS_DEFAULT,
-  USDT_ADDRESS,
-  USDC_ADDRESS,
-  CHAIN_ID,
-} from '../config'
+import { USDT_ADDRESS, USDC_ADDRESS, CHAIN_ID } from '../config'
 
 export default function Create() {
   const [chain] = useState<number>(CHAIN_ID)
@@ -15,14 +9,8 @@ export default function Create() {
   const [amount, setAmount] = useState<string>('')
   const [memo, setMemo] = useState<string>('')
 
-  // ✅ LOCKED (NOT EDITABLE)
-  const feeBps = FEE_BPS_DEFAULT
-  const treasury = TREASURY_WALLET
-
-  const feeLabel = useMemo(() => `${feeBps / 100}%`, [feeBps])
-
   // ✅ Paylink only includes receiver/token/amount/memo.
-  // ❗ Even if someone edits URL, Pay.tsx will IGNORE fee/treasury.
+  // ✅ Fee + Treasury are NOT in the link (and Pay.tsx must ignore them anyway).
   const payLink = useMemo(() => {
     if (!receiver) return ''
     const params = new URLSearchParams()
@@ -79,23 +67,10 @@ export default function Create() {
         style={{ width: '100%', marginBottom: 12 }}
       />
 
-      {/* ✅ LOCKED FEE (NOT EDITABLE) */}
-      <label>Fee (locked)</label>
-      <input
-        value={feeLabel}
-        disabled
-        readOnly
-        style={{ width: '100%', marginBottom: 12, opacity: 0.7 }}
-      />
-
-      {/* ✅ LOCKED TREASURY (NOT EDITABLE) */}
-      <label>Treasury wallet (locked)</label>
-      <input
-        value={treasury}
-        disabled
-        readOnly
-        style={{ width: '100%', marginBottom: 18, opacity: 0.7 }}
-      />
+      {/* ✅ Fee/Treasury are hidden. Optional safe display: */}
+      <div style={{ margin: '8px 0 14px', fontSize: 12, opacity: 0.8 }}>
+        Protocol fee: <b>1%</b>
+      </div>
 
       <button
         onClick={() => {
