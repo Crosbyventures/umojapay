@@ -1,29 +1,71 @@
 import { useMemo, useState } from 'react'
-import type { Address } from 'viem'
-import { FEE_BPS_DEFAULT, TREASURY_WALLET } from '../config'
+import { Address } from 'viem'
+import {
+  TREASURY_WALLET,
+  FEE_BPS_DEFAULT,
+  USDT_ADDRESS,
+  USDC_ADDRESS,
+  CHAIN_ID,
+} from '../config'
 
 export default function Pay() {
-  const [receiver, setReceiver] = useState<string>('')
+  const [receiver, setReceiver] = useState<Address>('' as Address)
   const [amount, setAmount] = useState<string>('')
+  const [token, setToken] = useState<'USDT' | 'USDC'>('USDT')
+  const [memo, setMemo] = useState<string>('')
 
-  // Locked values (NOT editable)
-  const feePercent = useMemo(() => (FEE_BPS_DEFAULT / 100).toFixed(2), [])
+  // ✅ HARD LOCKED (cannot be changed by UI or query params)
+  const feeBps = FEE_BPS_DEFAULT
+  const treasury = TREASURY_WALLET
+
+  const tokenAddress = useMemo(() => {
+    return token === 'USDT' ? USDT_ADDRESS : USDC_ADDRESS
+  }, [token])
+
+  const feePercent = (feeBps / 100).toFixed(2) + '%'
+
+  async function onPay() {
+    // ✅ This is where your real transfer function runs.
+    // IMPORTANT: when you call it, pass `treasury` + `feeBps` from HERE (locked),
+    // not from any user input.
+
+    console.log('PAY', {
+      CHAIN_ID,
+      token,
+      tokenAddress,
+      receiver,
+      amount,
+      memo,
+      feeBps,
+      treasury,
+    })
+
+    alert('Pay triggered (wire your existing transfer code here).')
+  }
 
   return (
     <div style={{ maxWidth: 520, margin: '0 auto', padding: 20 }}>
-      <h2 style={{ marginBottom: 14 }}>UMOJA Pay</h2>
+      <h2>UMOJA Pay</h2>
 
-      {/* Receiver */}
-      <label>Receiver</label>
+      <label>Token</label>
+      <select
+        value={token}
+        onChange={(e) => setToken(e.target.value as 'USDT' | 'USDC')}
+        style={{ width: '100%', marginBottom: 12 }}
+      >
+        <option value="USDT">USDT</option>
+        <option value="USDC">USDC</option>
+      </select>
+
+      <label>Receiver wallet</label>
       <input
         value={receiver}
-        onChange={(e) => setReceiver(e.target.value)}
+        onChange={(e) => setReceiver(e.target.value as Address)}
         placeholder="0x..."
         style={{ width: '100%', marginBottom: 12 }}
       />
 
-      {/* Amount */}
-      <label>Amount (USDT)</label>
+      <label>Amount</label>
       <input
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
@@ -31,25 +73,25 @@ export default function Pay() {
         style={{ width: '100%', marginBottom: 12 }}
       />
 
-      {/* LOCKED FEE (not editable) */}
-      <label>Protocol fee</label>
+      <label>Memo (optional)</label>
       <input
-        value={`${feePercent}% (${FEE_BPS_DEFAULT} bps)`}
-        disabled
-        readOnly
-        style={{ width: '100%', marginBottom: 12, opacity: 0.7 }}
+        value={memo}
+        onChange={(e) => setMemo(e.target.value)}
+        placeholder="e.g. Rent / Donation"
+        style={{ width: '100%', marginBottom: 12 }}
       />
 
-      {/* LOCKED TREASURY (not editable) */}
-      <label>Treasury wallet (fee recipient)</label>
-      <input
-        value={TREASURY_WALLET}
-        disabled
-        readOnly
-        style={{ width: '100%', marginBottom: 18, opacity: 0.7 }}
-      />
+      {/* ✅ Locked fee (not editable) */}
+      <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, opacity: 0.9 }}>
+        <div style={{ fontWeight: 700 }}>Protocol fee (locked)</div>
+        <div>{feePercent} (BPS: {feeBps})</div>
+        {/* ✅ Treasury is intentionally hidden */}
+        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+          Fee receiver is secured (not editable)
+        </div>
+      </div>
 
-      <button style={{ width: '100%', padding: 12 }}>
+      <button onClick={onPay} style={{ width: '100%', padding: 12 }}>
         Pay Now
       </button>
     </div>
