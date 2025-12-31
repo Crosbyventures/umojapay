@@ -1,141 +1,90 @@
-// src/Pay.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
+
 import {
   useAccount,
   useConnect,
   useDisconnect,
   useChainId,
   useSwitchChain,
-  useWriteContract,
+  useWalletClient,
 } from "wagmi";
 import { bsc } from "wagmi/chains";
-import { isAddress, parseUnits, formatUnits } from "viem";
 
-// =====================
-// CONFIG (BSC ONLY)
-// =====================
-const TREASURY_WALLET = "0x1e2ba4212d9a0dd87f8d28c9137371ad7b7b2dbf" as const;
+import { erc20Abi, isAddress, parseUnits, formatUnits } from "viem";
 
-// BSC USDT (BEP-20) — commonly used address
-const USDT_BSC = "0x55d398326f99059fF775485246999027B3197955" as const;
+import { USDT_ADDRESS, USDT_DECIMALS, TREASURY_WALLET, FEE_BPS } from "./config";
 
-// BSC USDT uses 18 decimals on BSC
-const USDT_DECIMALS = 18;
-
-// 1% fee
-const FEE_BPS = 100; // 100 bps = 1.00%
-const BPS_DENOM = 10_000;
-
-const ERC20_ABI = [
-  {
-    type: "function",
-    name: "transfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "value", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
-function shortAddr(addr?: string) {
-  if (!addr) return "";
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
-function clampAmountInput(v: string) {
-  // allow digits + dot
-  return v.replace(/[^\d.]/g, "");
+function useQuery() {
+  const { search } = useLocation();
+  return useMemo(() => new URLSearchParams(search), [search]);
 }
 
 export default function Pay() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const query = useQuery();
+  const location = useLocation();
 
-  // Prefill from URL
-  const urlTo = searchParams.get("to") ?? "";
-  const urlA = searchParams.get("a") ?? "";
-
-  const [to, setTo] = useState<string>(urlTo);
-  const [amount, setAmount] = useState<string>(urlA);
-
-  // QR / share link
-  const [qrValue, setQrValue] = useState<string>("");
-
-  // wagmi
   const { address, isConnected } = useAccount();
-  const { connectors, connectAsync } = useConnect();
   const { disconnect } = useDisconnect();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
   const chainId = useChainId();
-  const { switchChainAsync } = useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
 
-  // status
+  const [merchant, setMerchant] = useState<string>(query.get("to") || "");
+  const [amountStr, setAmountStr] = useState<string>(query.get("a") || "2");
+
   const [status, setStatus] = useState<string>("");
-  const [err, setErr] = useState<string>("");
-  const [txFeeHash, setTxFeeHash] = useState<string>("");
-  const [txMerchantHash, setTxMerchantHash] = useState<string>("");
+  const [tx1, setTx1] = useState<string>("");
+  const [tx2, setTx2] = useState<string>("");
 
-  // keep URL synced (nice for sharing)
+  // keep inputs synced with URL when opening a prefilled link
   useEffect(() => {
-    const next = new URLSearchParams(searchParams);
-    if (to) next.set("to", to);
-    else next.delete("to");
-
-    if (amount) next.set("a", amount);
-    else next.delete("a");
-
-    setSearchParams(next, { replace: true });
+    const to = query.get("to");
+    const a = query.get("a");
+    if (to) setMerchant(to);
+    if (a) setAmountStr(a);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [to, amount]);
+  }, [location.search]);
 
-  // Auto-generate QR as soon as receiver wallet looks valid
-  useEffect(() => {
-    if (isAddress(to)) {
-      const base = `${window.location.origin}/pay`;
-      const url =
-        base + `?to=${to}` + (amount ? `&a=${encodeURIComponent(amount)}` : "");
-      setQrValue(url);
-    } else {
-      setQrValue("");
-    }
-  }, [to, amount]);
+  const amountNum = Number(amountStr || "0");
+  const feeNum = amountNum > 0 ? (amountNum * (FEE_BPS / 10000)) : 0;
+  const netNum = amountNum > 0 ? (amountNum - feeNum) : 0;
 
-  const bscReady = chainId === bsc.id;
+  const merchantOk = isAddress(merchant || "");
+  const amountOk = Number.isFinite(amountNum) && amountNum > 0;
 
-  const parsed = useMemo(() => {
-    const validTo = isAddress(to);
-    const validAmt =
-      amount !== "" && !Number.isNaN(Number(amount)) && Number(amount) > 0;
-
-    let total = 0n;
-    let fee = 0n;
-    let merchant = 0n;
-
+  const feeUnits = useMemo(() => {
     try {
-      if (validAmt) {
-        total = parseUnits(amount, USDT_DECIMALS);
-        fee = (total * BigInt(FEE_BPS)) / BigInt(BPS_DENOM);
-        merchant = total - fee;
-      }
+      return parseUnits(feeNum.toFixed(USDT_DECIMALS), USDT_DECIMALS);
     } catch {
-      // ignore
+      return 0n;
     }
+  }, [feeNum]);
 
-    return { validTo, validAmt, total, fee, merchant };
-  }, [to, amount]);
+  const netUnits = useMemo(() => {
+    try {
+      return parseUnits(netNum.toFixed(USDT_DECIMALS), USDT_DECIMALS);
+    } catch {
+      return 0n;
+    }
+  }, [netNum]);
 
-  const feeDisplay = useMemo(() => {
-    return parsed.validAmt ? Number(formatUnits(parsed.fee, USDT_DECIMALS)).toFixed(6) : "0.000000";
-  }, [parsed]);
+  const normalLink = useMemo(() => {
+    const base = `${window.location.origin}/pay`;
+    const u = new URL(base);
+    if (merchantOk) u.searchParams.set("to", merchant);
+    if (amountOk) u.searchParams.set("a", String(amountNum));
+    return u.toString();
+  }, [merchant, merchantOk, amountNum, amountOk]);
 
-  const merchantDisplay = useMemo(() => {
-    return parsed.validAmt
-      ? Number(formatUnits(parsed.merchant, USDT_DECIMALS)).toFixed(6)
-      : "0.000000";
-  }, [parsed]);
+  // ✅ This is the IMPORTANT part: QR opens the dApp inside MetaMask browser
+  const metaMaskDeepLink = useMemo(() => {
+    // metamask wants: https://metamask.app.link/dapp/<domain>/<path>?query
+    const dappPath = `${window.location.host}${new URL(normalLink).pathname}${new URL(normalLink).search}`;
+    return `https://metamask.app.link/dapp/${dappPath}`;
+  }, [normalLink]);
 
   async function ensureBsc() {
     if (chainId === bsc.id) return;
@@ -143,345 +92,179 @@ export default function Pay() {
     await switchChainAsync({ chainId: bsc.id });
   }
 
-  async function connectWallet() {
-    setErr("");
-    setStatus("Connecting...");
-    // pick injected first, fallback walletconnect if present
-    const injected = connectors.find((c: any) => c.id === "injected");
-    const wc = connectors.find(
-      (c: any) =>
-        c.id === "walletConnect" ||
-        (typeof c.name === "string" && c.name.toLowerCase().includes("walletconnect"))
-    );
-
-    const picked = injected ?? wc ?? connectors[0];
-    if (!picked) throw new Error("No wallet connector found.");
-
-    await connectAsync({ connector: picked });
-    setStatus("Connected.");
-  }
-
-  async function payNow() {
-    setErr("");
+  async function onPay() {
     setStatus("");
-    setTxFeeHash("");
-    setTxMerchantHash("");
+    setTx1("");
+    setTx2("");
 
-    if (!isConnected || !address) {
-      setErr("Connect your wallet first.");
-      return;
-    }
-
-    if (!parsed.validTo) {
-      setErr("Paste a valid BSC wallet address (0x...).");
-      return;
-    }
-
-    if (!parsed.validAmt) {
-      setErr("Enter a valid USDT amount.");
-      return;
-    }
-
-    if (!isAddress(TREASURY_WALLET)) {
-      setErr("Treasury wallet is invalid.");
-      return;
-    }
+    if (!merchantOk) return setStatus("Enter a valid BSC wallet address.");
+    if (!amountOk) return setStatus("Enter a valid amount > 0.");
+    if (!isConnected) return setStatus("Connect your wallet first.");
+    if (!walletClient) return setStatus("Wallet client not ready. Try reconnecting.");
 
     try {
       await ensureBsc();
 
-      // 1) Pay fee to treasury
-      setStatus("Sending 1% fee to treasury...");
-      const feeHash = await writeContractAsync({
-        abi: ERC20_ABI,
-        address: USDT_BSC,
+      setStatus("Sending fee to treasury...");
+      const hashFee = await walletClient.writeContract({
+        address: USDT_ADDRESS as `0x${string}`,
+        abi: erc20Abi,
         functionName: "transfer",
-        args: [TREASURY_WALLET, parsed.fee],
+        args: [TREASURY_WALLET as `0x${string}`, feeUnits],
       });
-      setTxFeeHash(String(feeHash));
+      setTx1(hashFee);
 
-      // 2) Pay merchant (net)
-      setStatus("Sending payment to merchant...");
-      const merchantHash = await writeContractAsync({
-        abi: ERC20_ABI,
-        address: USDT_BSC,
+      setStatus("Sending net amount to merchant...");
+      const hashNet = await walletClient.writeContract({
+        address: USDT_ADDRESS as `0x${string}`,
+        abi: erc20Abi,
         functionName: "transfer",
-        args: [to as `0x${string}`, parsed.merchant],
+        args: [merchant as `0x${string}`, netUnits],
       });
-      setTxMerchantHash(String(merchantHash));
+      setTx2(hashNet);
 
-      setStatus("Done ✅ Payment sent.");
+      setStatus("✅ Done. Payment sent.");
     } catch (e: any) {
       console.error(e);
-      setErr(e?.shortMessage || e?.message || "Payment failed.");
-      setStatus("");
+      setStatus(e?.shortMessage || e?.message || "Transaction failed.");
     }
   }
 
+  const connectedShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          width: "min(780px, 100%)",
-          borderRadius: 18,
-          padding: 22,
-          background: "rgba(10, 16, 20, 0.82)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.35)",
-          color: "white",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: 0.2 }}>
-              UMOJA Pay (BSC • USDT)
-            </div>
-            <div style={{ opacity: 0.85, marginTop: 6 }}>
-              Simple scan → connect wallet → pay USDT on BNB Chain (BSC)
-            </div>
-          </div>
-
-          <div
-            style={{
-              alignSelf: "start",
-              padding: "8px 12px",
-              borderRadius: 999,
-              background: isConnected ? "rgba(0,255,150,0.10)" : "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              fontWeight: 700,
-            }}
-          >
-            {isConnected ? `Connected: ${shortAddr(address)}` : "Not connected"}
-          </div>
+    <div className="card">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1 style={{ margin: 0 }}>UMOJA Pay (BSC • USDT)</h1>
+          <div className="muted">Scan → open in MetaMask → connect wallet → pay USDT on BSC</div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-          {!isConnected ? (
-            <button
-              onClick={connectWallet}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(0, 180, 120, 0.20)",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Connect Wallet
-            </button>
-          ) : (
-            <button
-              onClick={() => disconnect()}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255, 255, 255, 0.08)",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Disconnect
-            </button>
-          )}
-
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: bscReady ? "rgba(0,255,150,0.12)" : "rgba(255,200,0,0.12)",
-              color: "white",
-              fontWeight: 800,
-            }}
-          >
-            {bscReady ? "BSC Ready ✅" : "Not on BSC"}
-          </div>
+        <div className="pill">
+          {isConnected ? `Connected: ${connectedShort}` : "Not connected"}
         </div>
+      </div>
 
-        {/* Inputs */}
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Merchant Wallet (BSC)</div>
-          <input
-            value={to}
-            onChange={(e) => setTo(e.target.value.trim())}
-            placeholder="0x..."
-            style={{
-              width: "100%",
-              padding: "14px 14px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-              outline: "none",
-              fontSize: 16,
-            }}
-          />
-          <div style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-            Paste the receiver wallet → QR shows instantly.
-          </div>
-
-          <div style={{ fontWeight: 800, marginTop: 16, marginBottom: 8 }}>Amount (USDT)</div>
-          <input
-            value={amount}
-            onChange={(e) => setAmount(clampAmountInput(e.target.value))}
-            placeholder="e.g. 10"
-            inputMode="decimal"
-            style={{
-              width: "100%",
-              padding: "14px 14px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-              outline: "none",
-              fontSize: 16,
-            }}
-          />
-
-          {/* Fee breakdown */}
-          <div
-            style={{
-              marginTop: 14,
-              padding: 14,
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background: "rgba(255,255,255,0.04)",
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 800 }}>Fee (1%) → Treasury</div>
-              <div style={{ fontWeight: 900 }}>{feeDisplay} USDT</div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 800 }}>Merchant receives</div>
-              <div style={{ fontWeight: 900 }}>{merchantDisplay} USDT</div>
-            </div>
-          </div>
-
-          {/* QR */}
-          {qrValue && (
-            <div style={{ marginTop: 18, textAlign: "center" }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Scan to Pay</div>
-              <div
-                style={{
-                  display: "inline-block",
-                  padding: 14,
-                  borderRadius: 14,
-                  background: "white",
-                }}
-              >
-                <QRCodeCanvas value={qrValue} size={220} />
-              </div>
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-                BSC · USDT · Treasury fee: 1%
-              </div>
-            </div>
-          )}
-
-          {/* Pay */}
+      <div className="row" style={{ gap: 10, marginTop: 14 }}>
+        {isConnected ? (
+          <button className="btn" onClick={() => disconnect()}>Disconnect</button>
+        ) : (
           <button
-            onClick={payNow}
-            disabled={!isConnected || !parsed.validTo || !parsed.validAmt}
-            style={{
-              width: "100%",
-              marginTop: 18,
-              padding: "14px 16px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                !isConnected || !parsed.validTo || !parsed.validAmt
-                  ? "rgba(255,255,255,0.10)"
-                  : "rgba(0, 200, 120, 0.28)",
-              color: "white",
-              cursor:
-                !isConnected || !parsed.validTo || !parsed.validAmt ? "not-allowed" : "pointer",
-              fontWeight: 900,
-              fontSize: 16,
-            }}
+            className="btn"
+            onClick={() => connect({ connector: connectors[0] })}
+            disabled={isConnecting}
           >
-            Pay Now
+            {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
+        )}
 
-          {/* Share link */}
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Share link (prefilled):</div>
-            <a
-              href={qrValue || "#"}
-              style={{ color: "rgba(150,255,210,0.95)", wordBreak: "break-all" }}
-              onClick={(e) => {
-                if (!qrValue) e.preventDefault();
-              }}
-            >
-              {qrValue || `${window.location.origin}/pay`}
-            </a>
+        <div className="pill">
+          {chainId === bsc.id ? "BSC Ready ✅" : "Wrong network ❌"}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <label className="label">Merchant Wallet (BSC)</label>
+        <input
+          className="input"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value.trim())}
+          placeholder="0x..."
+        />
+        <div className="muted" style={{ marginTop: 6 }}>
+          Paste receiver wallet → QR updates instantly.
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <label className="label">Amount (USDT)</label>
+        <input
+          className="input"
+          value={amountStr}
+          onChange={(e) => setAmountStr(e.target.value)}
+          inputMode="decimal"
+          placeholder="2"
+        />
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontWeight: 700 }}>Fee ({(FEE_BPS / 100).toFixed(2)}%) → Treasury</div>
+            <div style={{ fontWeight: 700, marginTop: 6 }}>Merchant receives</div>
           </div>
-
-          {/* Status / errors */}
-          {(status || err) && (
-            <div
-              style={{
-                marginTop: 14,
-                padding: 12,
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: err ? "rgba(255,80,80,0.12)" : "rgba(0,255,150,0.10)",
-              }}
-            >
-              {status && <div style={{ fontWeight: 900 }}>{status}</div>}
-              {err && <div style={{ fontWeight: 900 }}>{err}</div>}
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontWeight: 800 }}>
+              {formatUnits(feeUnits, USDT_DECIMALS)} USDT
             </div>
-          )}
-
-          {/* Tx hashes */}
-          {(txFeeHash || txMerchantHash) && (
-            <div style={{ marginTop: 14, fontSize: 13, opacity: 0.9 }}>
-              {txFeeHash && (
-                <div style={{ marginBottom: 6 }}>
-                  Fee TX:{" "}
-                  <a
-                    href={`https://bscscan.com/tx/${txFeeHash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "rgba(150,255,210,0.95)" }}
-                  >
-                    {txFeeHash}
-                  </a>
-                </div>
-              )}
-              {txMerchantHash && (
-                <div>
-                  Merchant TX:{" "}
-                  <a
-                    href={`https://bscscan.com/tx/${txMerchantHash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "rgba(150,255,210,0.95)" }}
-                  >
-                    {txMerchantHash}
-                  </a>
-                </div>
-              )}
+            <div style={{ fontWeight: 800, marginTop: 6 }}>
+              {formatUnits(netUnits, USDT_DECIMALS)} USDT
             </div>
-          )}
-
-          <div style={{ marginTop: 14, opacity: 0.75, fontSize: 12 }}>
-            Network: BNB Chain (BSC) • Token: USDT • Treasury fee: 1.00%
           </div>
         </div>
       </div>
+
+      <div style={{ marginTop: 18, textAlign: "center" }}>
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>Scan to Pay (opens in MetaMask)</div>
+        <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 16 }}>
+          <QRCodeCanvas value={metaMaskDeepLink} size={260} includeMargin />
+        </div>
+        <div className="muted" style={{ marginTop: 10 }}>
+          BSC • USDT • Treasury fee: {(FEE_BPS / 100).toFixed(2)}%
+        </div>
+      </div>
+
+      <button
+        className="btn primary"
+        style={{ marginTop: 18, width: "100%" }}
+        onClick={onPay}
+        disabled={!merchantOk || !amountOk || isConnecting || isSwitching}
+      >
+        Pay Now
+      </button>
+
+      <div style={{ marginTop: 14 }}>
+        <div className="label">Share link (normal):</div>
+        <a href={normalLink} target="_blank" rel="noreferrer">{normalLink}</a>
+
+        <div className="label" style={{ marginTop: 10 }}>Share link (MetaMask deep link):</div>
+        <a href={metaMaskDeepLink} target="_blank" rel="noreferrer">{metaMaskDeepLink}</a>
+      </div>
+
+      {status && (
+        <div className="notice" style={{ marginTop: 14 }}>
+          {status}
+        </div>
+      )}
+
+      {(tx1 || tx2) && (
+        <div style={{ marginTop: 10 }} className="muted">
+          {tx1 && (
+            <div>
+              Fee TX:{" "}
+              <a
+                href={`https://bscscan.com/tx/${tx1}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {tx1}
+              </a>
+            </div>
+          )}
+          {tx2 && (
+            <div>
+              Merchant TX:{" "}
+              <a
+                href={`https://bscscan.com/tx/${tx2}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {tx2}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
