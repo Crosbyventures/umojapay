@@ -1,32 +1,27 @@
 {
-  "name": "umoja-paylinks",
+  "name": "umojapay",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.62.0",
-    "@wagmi/core": "^2.14.0",
-    "qrcode": "^1.5.4",
+    "@tanstack/react-query": "^5.90.16",
+    "qrcode.react": "^3.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-qr-code": "^2.0.18",
-    "react-router-dom": "^6.27.0",
-    "viem": "^2.21.0",
-    "wagmi": "^2.12.0"
+    "react-router-dom": "^6.30.2",
+    "viem": "^2.43.4",
+    "wagmi": "^3.1.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "gh-pages": "^6.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.8"
   }
 }

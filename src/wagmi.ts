@@ -1,15 +1,16 @@
-import { http, createConfig } from 'wagmi'
-import { bsc } from 'wagmi/chains'
-import { injected, walletConnect } from 'wagmi/connectors'
-import { WALLETCONNECT_PROJECT_ID } from './config'
+// src/wagmi.ts
+import { createConfig, http } from "wagmi";
+import { bsc } from "wagmi/chains";
+import { injected } from "wagmi/connectors";
 
-export const config = createConfig({
+export const wagmiConfig = createConfig({
   chains: [bsc],
   connectors: [
-    injected(),
-    walletConnect({ projectId: WALLETCONNECT_PROJECT_ID }),
+    injected({
+      shimDisconnect: true,
+    }),
   ],
   transports: {
-    [bsc.id]: http('https://bsc-dataseed.binance.org')
-  }
-})
+    [bsc.id]: http(),
+  },
+});

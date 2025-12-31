@@ -1,26 +1,21 @@
-import { Address } from 'viem'
+// src/config.ts
 
-export const APP_NAME = 'UMOJA PayLinks'
+export const APP_NAME = "UMOJA Pay (BSC • USDT)";
 
-// ===== CHAINS =====
-export const CHAIN_ID = 56 // BSC mainnet
+// BSC mainnet
+export const BSC_CHAIN_ID = 56;
 
-// ===== TOKENS =====
-export const USDT_ADDRESS: Address =
-  '0x55d398326f99059fF775485246999027B3197955'
+// USDT (BEP-20) on BSC mainnet
+export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955" as const;
 
-export const USDC_ADDRESS: Address =
-  '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'
+// Your treasury wallet (1% fee goes here)
+export const TREASURY_ADDRESS = "0x1e2ba4212d9a0dd87f8d28c9137371ad7b7b2dbf" as const;
 
-// ===== TREASURY (FEES GO HERE) =====
-// LOCKED IN CODE (NOT EDITABLE IN UI)
-export const TREASURY_WALLET: Address =
-  '0x1e2ba4212d9a0dd87f8d28c9137371ad7b7b2dbf'
+// 1% = 100 bps
+export const FEE_BPS = 100;
 
-// ===== FEES =====
-// 100 bps = 1% (LOCKED IN CODE)
-export const FEE_BPS_DEFAULT = 100
+// USDT on BSC uses 18 decimals
+export const USDT_DECIMALS = 18;
 
-// ===== WALLETCONNECT =====
-// Put your real WalletConnect Project ID here
-export const WALLETCONNECT_PROJECT_ID = 'YOUR_WALLETCONNECT_PROJECT_ID'
+// Basic address check (frontend only)
+export const isAddressLoose = (v: string) => /^0x[a-fA-F0-9]{40}$/.test(v);
